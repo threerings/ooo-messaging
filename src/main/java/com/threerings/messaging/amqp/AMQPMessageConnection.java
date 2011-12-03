@@ -10,6 +10,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.collect.Lists;
+
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
@@ -56,15 +58,13 @@ public class AMQPMessageConnection
         _sender = new AMQPMessageSender(_channelFactory);
 
         _reconnectService = Executors.newSingleThreadScheduledExecutor();
+        // schedule a connection attempt immediately on the reconnect thread
+        _reconnectService.schedule(new AttemptReconnect(), 1, TimeUnit.MILLISECONDS);
+    }
 
-        // Try connecting to the AMQP server. If we cannot connect at this time, try again later,
-        // but let construction succeed.
-        try {
-            connect();
-        } catch (IOException ioe) {
-            logger.warning("Cannot connect to RabbitMQ server.  Will retry every 5 seconds.", ioe);
-            _reconnectService.schedule(new AttemptReconnect(), 5, TimeUnit.SECONDS);
-        }
+    public boolean isConnected () {
+        Connection conn = _conn;
+        return (conn != null && conn.isOpen());
     }
 
     public void listen (AddressedMessageListener listener)
@@ -74,53 +74,56 @@ public class AMQPMessageConnection
         // check to see if this listener already exists, if so, we will reconnect
         if (_listeners.containsKey(listener)) {
             connectedListener = _listeners.get(listener);
-            if(!connectedListener.isClosed()) {
+            if (connectedListener != null && !connectedListener.isClosed()) {
                 logger.warning("Reconnecting listener", "listener", listener);
                 try {
                     connectedListener.close();
                 } catch (IOException ex) {
-                    logger.warning("Could not close old listener connection", "listener", listener,
-                        ex);
+                    logger.warning("Could not close old listener connection",
+                                   "listener", listener, ex);
                 }
             }
         }
 
-        logger.info("Connecting listener", "listener", listener);
-        connectedListener = new AMQPConnectedListener(listener.queueName, listener.address,
-            listener, _channelFactory);
-
-        _listeners.put(listener, connectedListener);
+        if (isConnected()) {
+            logger.info("Connecting listener", "listener", listener);
+            connectedListener = new AMQPConnectedListener(
+                listener.queueName, listener.address, listener, _channelFactory);
+            _listeners.put(listener, connectedListener);
+        } else {
+            // otherwise wait for reconnect and we'll connect this listener
+            logger.info("Deferring listener until we reconnect", "listener", listener);
+            _listeners.put(listener, null);
+        }
     }
 
     public void removeListener (AddressedMessageListener listener)
     {
         if (_listeners.containsKey(listener)) {
             logger.warning("Removing listener", "listener", listener);
-            // remove the listener
+            // remove the listener and disconnect it
             AMQPConnectedListener connectedListener = _listeners.remove(listener);
-            // disconnect it
-            if (!connectedListener.isClosed()) {
+            if (connectedListener != null && !connectedListener.isClosed()) {
                 try {
                     connectedListener.close();
                 } catch (IOException ex) {
                     logger.warning("Barfed whiled trying to close a connected RabbitMQ listener",
-                        "listener", listener, "connectedListener", connectedListener, ex);
+                                   "listener", listener, "connectedListener", connectedListener, ex);
                 }
             }
         } else {
-            logger.warning("Tried to remove a deaf RabbitMQ message listener", "listener",
-                listener);
+            logger.warning("Tried to remove a deaf RabbitMQ message listener", "listener", listener);
         }
     }
 
-    public synchronized void close()
+    public synchronized void close ()
         throws IOException
     {
         logger.info("Closing connection to RabbitMQ server.");
         _reconnectService.shutdown();
         _sender.close();
 
-        for (AddressedMessageListener listener : _listeners.keySet()) {
+        for (AddressedMessageListener listener : Lists.newArrayList(_listeners.keySet())) {
             removeListener(listener);
         }
         if (_conn != null) {
@@ -128,7 +131,7 @@ public class AMQPMessageConnection
         }
     }
 
-    public MessageSender getSender()
+    public MessageSender getSender ()
     {
         return _sender;
     }
@@ -141,7 +144,7 @@ public class AMQPMessageConnection
     private synchronized void connect ()
         throws IOException
     {
-        if (_conn != null && _conn.isOpen()) {
+        if (isConnected()) {
             return;
         }
 
@@ -190,19 +193,19 @@ public class AMQPMessageConnection
 
     protected class ListenerReconnectAttempt implements Runnable
     {
-        public ListenerReconnectAttempt (AddressedMessageListener listener)
-        {
+        public ListenerReconnectAttempt (AddressedMessageListener listener) {
             _listener = listener;
         }
 
-        public void run ()
-        {
+        public void run () {
             try {
                 listen(_listener);
                 // check to see if it connected successfully
-                if (_listeners.get(_listener).isClosed()) {
-                    logger.warning("Failed to connect listener. Will retry.", "listener",
-                        _listener);
+                AMQPConnectedListener conn = _listeners.get(_listener);
+                if (conn == null) {
+                    logger.info("Listener connection deferred.", "listener", _listener);
+                } else if (conn.isClosed()) {
+                    logger.warning("Failed to connect listener. Will retry.", "listener", _listener);
                     _reconnectService.schedule(this, 5, TimeUnit.SECONDS);
                 } else {
                     logger.info("Listener connected", "listener", _listener);
@@ -211,7 +214,7 @@ public class AMQPMessageConnection
                 // no problem, we're shutting down
             } catch (Throwable ex) {
                 logger.warning("Something nasty happened while trying to reconnect listener",
-                    "listener", _listener, ex);
+                               "listener", _listener, ex);
                 _reconnectService.schedule(this, 60, TimeUnit.SECONDS);
             }
         }
