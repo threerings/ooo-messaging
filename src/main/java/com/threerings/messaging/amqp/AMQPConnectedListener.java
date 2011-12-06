@@ -29,6 +29,9 @@ import com.threerings.messaging.OutMessage;
 public class AMQPConnectedListener
     implements ConnectedListener
 {
+    /** A null-ish sentinel, used by {@link AMQPMessageConnection}. */
+    public static final AMQPConnectedListener NULL = new AMQPConnectedListener();
+
     /**
      * Creates a new connected listener and begins listening on the queue for messages.
      *
@@ -151,6 +154,15 @@ public class AMQPConnectedListener
                 }
             }
         });
+    }
+
+    // used only for null-ish singleton
+    private AMQPConnectedListener () {
+        _queueName = null;
+        _addr = null;
+        _listener = null;
+        _channelFactory = null;
+        _shutdown = true; // appear closed
     }
 
     protected class AMQPInMessage implements InMessage

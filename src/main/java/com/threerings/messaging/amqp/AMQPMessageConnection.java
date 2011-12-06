@@ -74,7 +74,7 @@ public class AMQPMessageConnection
         // check to see if this listener already exists, if so, we will reconnect
         if (_listeners.containsKey(listener)) {
             connectedListener = _listeners.get(listener);
-            if (connectedListener != null && !connectedListener.isClosed()) {
+            if (!connectedListener.isClosed()) {
                 logger.warning("Reconnecting listener", "listener", listener);
                 try {
                     connectedListener.close();
@@ -93,7 +93,7 @@ public class AMQPMessageConnection
         } else {
             // otherwise wait for reconnect and we'll connect this listener
             logger.info("Deferring listener until we reconnect", "listener", listener);
-            _listeners.put(listener, null);
+            _listeners.put(listener, AMQPConnectedListener.NULL);
         }
     }
 
@@ -103,7 +103,7 @@ public class AMQPMessageConnection
             logger.warning("Removing listener", "listener", listener);
             // remove the listener and disconnect it
             AMQPConnectedListener connectedListener = _listeners.remove(listener);
-            if (connectedListener != null && !connectedListener.isClosed()) {
+            if (!connectedListener.isClosed()) {
                 try {
                     connectedListener.close();
                 } catch (IOException ex) {
@@ -202,7 +202,7 @@ public class AMQPMessageConnection
                 listen(_listener);
                 // check to see if it connected successfully
                 AMQPConnectedListener conn = _listeners.get(_listener);
-                if (conn == null) {
+                if (conn == AMQPConnectedListener.NULL) {
                     logger.info("Listener connection deferred.", "listener", _listener);
                 } else if (conn.isClosed()) {
                     logger.warning("Failed to connect listener. Will retry.", "listener", _listener);
