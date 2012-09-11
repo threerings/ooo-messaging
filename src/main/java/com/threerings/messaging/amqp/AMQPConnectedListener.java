@@ -196,7 +196,7 @@ public class AMQPConnectedListener
         {
             // Ensure this doesn't trip up with connect(), shutdown(), etc.
             synchronized (AMQPConnectedListener.this) {
-                _channel.basicPublish(_addr.exchange, _props.replyTo, _props,
+                _channel.basicPublish(_addr.exchange, _props.getReplyTo(), _props,
                     message.encodeMessage());
             }
         }
