@@ -9,7 +9,7 @@
 
   <artifactId>ooo-messaging</artifactId>
   <packaging>jar</packaging>
-  <version>1.0.1</version>
+  <version>1.1-SNAPSHOT</version>
   <name>ooo-messaging</name>
 
   <dependencies>
