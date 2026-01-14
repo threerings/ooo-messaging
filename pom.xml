@@ -5,7 +5,7 @@
   <groupId>com.threerings</groupId>
   <artifactId>ooo-messaging</artifactId>
   <packaging>jar</packaging>
-  <version>1.2-SNAPSHOT</version>
+  <version>1.1</version>
 
   <name>ooo-messaging</name>
   <description>
@@ -37,7 +37,7 @@
     <connection>scm:git:git://github.com/threerings/ooo-messaging.git</connection>
     <developerConnection>scm:git:git@github.com:threerings/ooo-messaging.git</developerConnection>
     <url>https://github.com/threerings/ooo-messaging</url>
-    <tag>HEAD</tag>
+    <tag>ooo-messaging-1.1</tag>
   </scm>
 
   <prerequisites>
